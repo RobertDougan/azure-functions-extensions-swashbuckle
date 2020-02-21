@@ -1,11 +1,4 @@
-﻿using System;
-using System.IO;
-using System.Net.Http;
-using System.Reflection;
-using System.Threading;
-using System.Threading.Tasks;
-using AzureFunctions.Extensions.Swashbuckle.Attribute;
-using Microsoft.AspNetCore.Mvc;
+﻿using AzureFunctions.Extensions.Swashbuckle.Attribute;
 using Microsoft.AspNetCore.Mvc.ApiExplorer;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Description;
@@ -13,8 +6,16 @@ using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.Azure.WebJobs.Host.Config;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Microsoft.OpenApi.Models;
+using Newtonsoft.Json;
 using Swashbuckle.AspNetCore.Swagger;
 using Swashbuckle.AspNetCore.SwaggerGen;
+using System;
+using System.IO;
+using System.Net.Http;
+using System.Reflection;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace AzureFunctions.Extensions.Swashbuckle
 {
@@ -104,7 +105,7 @@ namespace AzureFunctions.Extensions.Swashbuckle
 
             var services = new ServiceCollection();
 
-            services.AddSingleton<IApiDescriptionGroupCollectionProvider>(_apiDescriptionGroupCollectionProvider);
+            services.AddSingleton(_apiDescriptionGroupCollectionProvider);
             services.AddSwaggerGen(options =>
             {
                 if (_option.Documents.Length == 0)
@@ -120,7 +121,8 @@ namespace AzureFunctions.Extensions.Swashbuckle
                     }
                 }
 
-                options.DescribeAllEnumsAsStrings();
+                //TODO: Review this, do we still need it?
+                // options.DescribeAllEnumsAsStrings();
 
                 if (!string.IsNullOrWhiteSpace(_xmlPath))
                 {
@@ -133,6 +135,10 @@ namespace AzureFunctions.Extensions.Swashbuckle
 
             _serviceProvider = services.BuildServiceProvider(true);
 
+            // Required steps to continue to use Newtonsoft JSON in .NET Core 3.x.x
+            services.AddMvc();
+            services.AddSwaggerGenNewtonsoftSupport();
+
         }
 
         public Stream GetSwaggerDocument(string host, string documentName = "v1")
@@ -142,9 +148,7 @@ namespace AzureFunctions.Extensions.Swashbuckle
             var swaggerDocument = requiredService.GetSwagger(documentName, host, basePath);
             var mem = new MemoryStream();
             var streamWriter = new StreamWriter(mem);
-            var mvcOptionsAccessor =
-                (IOptions<MvcJsonOptions>)_serviceProvider.GetService(typeof(IOptions<MvcJsonOptions>));
-            var serializer = SwaggerSerializerFactory.Create(mvcOptionsAccessor);
+            var serializer = new JsonSerializer();
             serializer.Serialize(streamWriter, swaggerDocument);
             streamWriter.Flush();
             mem.Position = 0;
@@ -158,11 +162,11 @@ namespace AzureFunctions.Extensions.Swashbuckle
 
         private static void AddSwaggerDocument(SwaggerGenOptions options, OptionDocument document)
         {
-            options.SwaggerDoc(document.Name, new Info
+            options.SwaggerDoc(document.Name, new OpenApiInfo
             {
                 Title = document.Title,
-                Version = document.Version,
-                Description = document.Description,
+                Version = "v1",
+                Description = document.Description
             });
         }
     }
